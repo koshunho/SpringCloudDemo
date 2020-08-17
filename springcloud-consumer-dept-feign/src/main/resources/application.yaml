@@ -1,0 +1,13 @@
+server:
+  port: 81
+
+eureka:
+  client:
+    register-with-eureka: false #不向eureka注册自己（因为这是客户端）
+    service-url:
+      defaultZone: http://localhost:7001/eureka/
+
+#开启hystrix服务降级
+feign:
+  hystrix:
+    enabled: true

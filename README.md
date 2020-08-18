@@ -1,10 +1,44 @@
 # SpringCloudDemo
 
+* [SpringCloudDemo](#springclouddemo)
+	* [五大组件](#五大组件)
+	* [Eureka服务注册、发现](#eureka服务注册-发现)
+		* [springcloud-eureka-7001](#springcloud-eureka-7001)
+		* [springcloud-provider-dept-8001](#springcloud-provider-dept-8001)
+	* [Eureka自我保护机制](#eureka自我保护机制)
+	* [Ribbon 负载均衡](#ribbon-负载均衡)
+		* [springboot-consumer-dept-81](#springboot-consumer-dept-81)
+		* [详解@LoadBalanced](#详解loadbalanced)
+		* [RestTemplate的IRule](#resttemplate的irule)
+		* [Ribbon核心组件IRule](#ribbon核心组件irule)
+	* [Feign](#feign)
+	* [Hystrix](#hystrix)
+		* [服务熔断](#服务熔断)
+		* [服务降级](#服务降级)
+		* [熔断 和 降级 差异](#熔断-和-降级-差异)
+		* [服务监控](#服务监控)
+	* [Zuul 路由网关](#zuul-路由网关)
+
+---
 1. 导入依赖
 2. 编写配置文件
 3. 开启这个功能 `@EnableXXXXX`
 4. 配置类
 
+---
+
+### 五大组件
+服务发现—— Eureka
+
+负载均衡——Ribbon
+
+断路器——Hystrix
+
+服务网关——Zuul
+
+分布式配置——Spring Cloud Config
+
+---
 ### Eureka服务注册、发现
 Eureka Server提供服务注册服务，各个节点启动后，会在Eureka Server中进行注册，这样Eureka Server中的服务注册表中会存储所有可用服务节点的信息。
 
@@ -133,7 +167,7 @@ public class DeptProvider_8001 {
     }
 }
 ````
-
+---
 
 ### Eureka自我保护机制
 把一个Client断开
@@ -153,7 +187,7 @@ public class DeptProvider_8001 {
 
 在SpringCloud中，使用`eureka.server.enable-self-preservation = false`禁用自我保护模式（不推荐关闭）。
 
-
+---
 ### Ribbon 负载均衡
 
 负载均衡简单分类：
@@ -323,6 +357,64 @@ public class MyConfig {
 ##### Ribbon核心组件IRule
 [各种策略](https://www.cnblogs.com/LQBlog/p/10084581.html)
 
+---
+### Feign
+Feign是声明式的Web Service客户端，让微服务之间的调用变得更简单了，类似Controller调用Service。
+
+Feign集成了Ribbon！利用Ribbon维护了 某一个服务名 下的instance的信息，并且通过轮询的方式实现了客户端的负载均衡。而与Ribbon不同的是，只需要通过Feign只需要定义服务绑定接口，相比之下更优雅简单。
+
+之前是Ribbon + RestTemplate。Feign感觉就是封装了RestTemplate，在Feign的实现下，我们只需要创建一个接口并使用注解的方式来配置它（类似以前Dao接口上标注`@Mapper`，现在是微服务接口上标注`@FeignClient`即可）。
+
+1. 依赖
+```xml
+        <!--feign-->
+        <dependency>
+            <groupId>org.springframework.cloud</groupId>
+            <artifactId>spring-cloud-starter-feign</artifactId>
+            <version>1.4.7.RELEASE</version>
+        </dependency>
+```
+
+2. 写一个接口DeptClientService
+   - 需要绑定服务名！`@FeignClient(value = "SPRINGCLOUD-PROVIDER-DEPT")`！Feign就绑定了Provider的服务名，Consumer就通过接口来调用Feign提供的父服务
+```java
+@FeignClient(value = "SPRINGCLOUD-PROVIDER-DEPT")
+public interface DeptClientService {
+
+    @RequestMapping("/dept/get/{id}")
+    Dept queryById(@PathVariable("id") Long id);
+
+    @RequestMapping("/dept/list")
+    List<Dept> queryAll();
+
+    @RequestMapping("/dept/add")
+    boolean addDept(Dept dept);
+}
+
+```
+3. 修改Controller
+![Feign Controller](https://raw.githubusercontent.com/koshunho/koshunhopic/master/xiaoshujiang/1597741343822.png)
+
+4. 主启动类
+   - 加上 `@EnableFeignClients` 就能扫描到springcloud-api写的DeptClientServiceLe
+
+
+P.S. Feign自带负载均衡！要是我想修改负载均衡策略咋办？
+
+还是和Robbin差不多，只是**不需要**在getRestTemplate()方法上面加上`@LoadBalanced`了！！
+
+```java
+@Configuration
+public class MyConfig {
+    @Bean
+    public IRule myRule(){
+	    //使用随机算法来替代默认的轮训
+        return new RandomRule();
+    }
+}
+```
+
+---
 ### Hystrix
 
 分布式体系结构中各个服务会有很多依赖关系，每个依赖关系在某些时候会出现失败，从而导致服务血崩。
@@ -522,3 +614,67 @@ public class DeptConsumerDashboard_9001 {
 请求一个不存在数据多次，发现熔断了，爆红
 
 ![不正常](https://raw.githubusercontent.com/koshunho/koshunhopic/master/xiaoshujiang/1597687048660.png)
+
+---
+
+### Zuul 路由网关
+ 提供**路由** + **过滤**
+ 
+ 1. 依赖
+```xml
+        <!--zuul-->
+        <dependency>
+            <groupId>org.springframework.cloud</groupId>
+            <artifactId>spring-cloud-starter-zuul</artifactId>
+            <version>1.4.7.RELEASE</version>
+        </dependency>
+		<!--eureka-->
+        <dependency>
+            <groupId>org.springframework.cloud</groupId>
+            <artifactId>spring-cloud-starter-eureka</artifactId>
+            <version>1.4.7.RELEASE</version>
+        </dependency>
+```
+
+2. yaml
+   + 配置了路由访问映射规则，因为不想暴露我们真实的微服务地址！
+   + 配置前通过访问**服务名** http://localhost:9527/springcloud-provider-dept/dept/get/1 
+   + 配置后访问 http://localhost:9527/mydept/dept/get/1
+```yaml
+server:
+  port: 9527
+
+spring:
+  application:
+    name: springcloud-zuul-gateway
+
+eureka:
+  client:
+    service-url:
+      defaultZone: http://localhost:7001/eureka/
+  instance:
+    instance-id: zuul9527.com
+    prefer-ip-address: true
+
+info:
+  app.name: koshunho-springcloud
+  company.name: Waseda Daigaku
+
+#public void setRoutes(Map<String, ZuulProperties.ZuulRoute> routes) {
+#这里是一个KV键值对，可以锤便定义，比如我就写mydept
+zuul:
+  routes:
+    mydept.serviceId: springcloud-provider-dept
+    mydept.path: /mydept/**
+  ignored-services: springcloud-provider-dept #禁止使用该路径访问
+```
+
+3. 主启动类
+![Zuul](https://raw.githubusercontent.com/koshunho/koshunhopic/master/xiaoshujiang/1597743571710.png)
+
+配置路径映射！注意此时已经通过Zuul提供的网关9527端口访问了。通过服务名访问不了了，因为我隐藏起来了
+
+![](https://raw.githubusercontent.com/koshunho/koshunhopic/master/xiaoshujiang/1597743744745.png)
+
+所以现在只能通过我自定义的路径访问
+![](https://raw.githubusercontent.com/koshunho/koshunhopic/master/xiaoshujiang/1597743918029.png)

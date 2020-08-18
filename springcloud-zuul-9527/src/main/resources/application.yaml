@@ -1,0 +1,26 @@
+server:
+  port: 9527
+
+spring:
+  application:
+    name: springcloud-zuul-gateway
+
+eureka:
+  client:
+    service-url:
+      defaultZone: http://localhost:7001/eureka/
+  instance:
+    instance-id: zuul9527.com
+    prefer-ip-address: true
+
+info:
+  app.name: koshunho-springcloud
+  company.name: Waseda Daigaku
+
+#public void setRoutes(Map<String, ZuulProperties.ZuulRoute> routes) {
+#这里是一个KV键值对，可以锤便定义，比如我就写mydept
+zuul:
+  routes:
+    mydept.serviceId: springcloud-provider-dept
+    mydept.path: /mydept/**
+  ignored-services: springcloud-provider-dept #禁止使用该路径访问
